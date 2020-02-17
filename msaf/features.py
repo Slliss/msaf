@@ -345,3 +345,97 @@ class Tempogram(Features):
         return librosa.feature.tempogram(self._audio, sr=self.sr,
                                          hop_length=self.hop_length,
                                          win_length=self.win_length).T
+
+class MultiFeature(Features):
+    """This class contains the implementation of the MFCC+Chroma+zero-crossing+ Features.
+
+    The Mel-Frequency Cepstral Coefficients contain timbral content of a
+    given audio signal.
+    """
+    def __init__(self, file_struct, feat_type, sr=config.sample_rate,
+                 hop_length=config.hop_size, n_fft=config.n_fft,
+                 n_mels=config.mfcc.n_mels, n_mfcc=config.mfcc.n_mfcc,
+                 ref_power=config.mfcc.ref_power,
+                 n_bins=config.cqt.bins,
+                 norm=config.cqt.norm, filter_scale=config.cqt.filter_scale):
+        """Constructor of the class.
+
+        Parameters
+        ----------
+        file_struct: `msaf.input_output.FileStruct`
+            Object containing the file paths from where to extract/read
+            the features.
+        feat_type: `FeatureTypes`
+            Enum containing the type of features.
+        sr: int > 0
+            Sampling rate for the analysis.
+        hop_length: int > 0
+            Hop size in frames for the analysis.
+        n_fft: int > 0
+            Number of frames for the FFT.
+        n_mels: int > 0
+            Number of mel filters.
+        n_mfcc: int > 0
+            Number of mel coefficients.
+        ref_power: function
+            The reference power for logarithmic scaling.
+        """
+        # Init the parent
+        super().__init__(file_struct=file_struct, sr=sr, hop_length=hop_length,
+                         feat_type=feat_type)
+        # Init the MFCC parameters
+        self.n_fft = n_fft
+        self.n_mels = n_mels
+        self.n_mfcc = n_mfcc
+        # Init the CQT parameters
+        self.n_bins = n_bins
+        self.norm = norm
+        self.filter_scale = filter_scale
+        if ref_power == "max":
+            self.ref_power = np.max
+        elif ref_power == "min":
+            self.ref_power = np.min
+        elif ref_power == "median":
+            self.ref_power = np.median
+        else:
+            raise FeatureParamsError("Wrong value for ref_power")
+
+    @classmethod
+    def get_id(self):
+        """Identifier of these features."""
+        return "multiFeature"
+
+    def compute_features(self):
+        """Actual implementation of the features.
+
+        Returns
+        -------
+        mfcc: np.array(N, F)
+            The features, each row representing a feature vector for a give
+            time frame/beat.
+        """
+        S = librosa.feature.melspectrogram(self._audio,
+                                           sr=self.sr,
+                                           n_fft=self.n_fft,
+                                           hop_length=self.hop_length,
+                                           n_mels=self.n_mels)
+        log_S = librosa.amplitude_to_db(S, ref=self.ref_power)
+        mfccs = librosa.feature.mfcc(S=log_S, n_mfcc=self.n_mfcc).T
+        
+        chroma_stft = librosa.feature.chroma_stft(self._audio,
+                                                  sr=self.sr,
+                                                  n_fft=self.n_fft,
+                                                  hop_length=self.hop_length,n_chroma=12)
+        chroma_stft = np.array(chroma_stft, dtype='float64').transpose()
+        
+        zero_crossing_rate = librosa.feature.zero_crossing_rate(self._audio,hop_length=self.hop_length)
+        zero_crossing_rate = np.array(zero_crossing_rate, dtype='float64').transpose()
+
+        linear_cqt = np.abs(librosa.cqt(
+            self._audio, sr=self.sr, hop_length=self.hop_length,
+            n_bins=self.n_bins, norm=self.norm, filter_scale=self.filter_scale)
+                            ) ** 2
+        cqt = librosa.amplitude_to_db(linear_cqt, ref=self.ref_power).T
+        
+        full_features = np.concatenate((chroma_stft,cqt,mfccs,zero_crossing_rate), axis=1)
+        return full_features
