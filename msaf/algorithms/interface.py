@@ -83,7 +83,7 @@ class SegmenterInterface:
                                   "segmentations.")
 
     def _preprocess(self, valid_features=["pcp", "tonnetz", "mfcc",
-                                          "cqt", "tempogram"]):
+                                          "cqt", "tempogram", "multiFeature"]):
         """This method obtains the actual features."""
         # Use specific feature
         if self.feature_str not in valid_features:

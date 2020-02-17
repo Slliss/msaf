@@ -438,4 +438,5 @@ class MultiFeature(Features):
         cqt = librosa.amplitude_to_db(linear_cqt, ref=self.ref_power).T
         
         full_features = np.concatenate((chroma_stft,cqt,mfccs,zero_crossing_rate), axis=1)
+        print(full_features.shape)
         return full_features
